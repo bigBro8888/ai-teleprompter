@@ -83,16 +83,16 @@
   /* ============ 控制栏 ============ */
   #bar{
     position: fixed;
-    left: 50%; bottom: 20px;
+    left: 50%; bottom: 18px;
     transform: translateX(-50%) translateY(12px);
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
     justify-content: center;
-    gap: 12px 14px;
-    max-width: min(96vw, 1180px);
-    padding: 14px 18px;
-    border-radius: 22px;
+    gap: 10px;
+    max-width: min(96vw, 920px);
+    padding: 10px 14px;
+    border-radius: 18px;
     background: rgba(20,24,31,.9);
     border: 1px solid rgba(255,255,255,.10);
     backdrop-filter: blur(18px);
@@ -102,6 +102,8 @@
     opacity: 0;
     pointer-events: none;
     transition: opacity .28s ease, transform .28s ease;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
   }
   #bar.show{
     opacity: 1;
@@ -110,7 +112,7 @@
   }
 
   /* 通用按钮 */
-  #bar button{
+  #bar button, #fullBtn{
     appearance:none;
     border: 1px solid rgba(255,255,255,.14);
     background: rgba(255,255,255,.07);
@@ -126,22 +128,23 @@
     gap: 6px;
     -webkit-tap-highlight-color: transparent;
   }
-  #bar button:hover{ background: rgba(255,255,255,.15); }
-  #bar button:active{ transform: scale(.94); }
+  #bar button:hover, #fullBtn:hover{ background: rgba(255,255,255,.15); }
+  #bar button:active, #fullBtn:active{ transform: scale(.94); }
 
   /* 主播放键 */
   #bar button.primary{
-    height: 58px;
-    min-width: 148px;
-    padding: 0 26px;
-    font-size: 19px;
-    border-radius: 16px;
+    height: 46px;
+    min-width: 108px;
+    padding: 0 18px;
+    font-size: 16px;
+    border-radius: 13px;
     border-color: transparent;
     background: linear-gradient(135deg,#38bdf8,#818cf8);
     color:#08111c;
     font-weight: 800;
     letter-spacing: .04em;
     box-shadow: 0 6px 22px rgba(56,189,248,.30);
+    flex: none;
   }
   #bar button.primary.playing{
     background: linear-gradient(135deg,#fb7185,#f59e0b);
@@ -150,26 +153,22 @@
 
   /* 功能键 */
   #bar button.action{
-    height: 52px;
-    padding: 0 20px;
-    font-size: 16px;
-    border-radius: 14px;
-  }
-  #bar button.action.on{
-    background: rgba(56,189,248,.24);
-    border-color: rgba(56,189,248,.65);
-    color:#bae6fd;
+    height: 46px;
+    padding: 0 16px;
+    font-size: 15px;
+    border-radius: 13px;
+    flex: none;
   }
 
   /* 加减步进键 */
   #bar button.step{
-    width: 52px;
-    height: 52px;
+    width: 40px;
+    height: 40px;
     padding: 0;
-    font-size: 26px;
+    font-size: 22px;
     font-weight: 700;
     line-height: 1;
-    border-radius: 14px;
+    border-radius: 12px;
     color:#bae6fd;
     background: rgba(56,189,248,.14);
     border-color: rgba(56,189,248,.30);
@@ -180,31 +179,49 @@
   .group{
     display: flex;
     align-items: center;
-    gap: 8px;
-    padding: 5px 8px 5px 14px;
-    border-radius: 18px;
+    gap: 6px;
+    padding: 3px 6px 3px 12px;
+    border-radius: 14px;
     background: rgba(255,255,255,.035);
     border: 1px solid rgba(255,255,255,.07);
+    flex: none;
   }
   .group .label{
-    font-size: 13px;
+    font-size: 12px;
     color: #8b98a8;
     letter-spacing: .06em;
     margin-right: 2px;
   }
   .group .val{
-    min-width: 62px;
+    min-width: 42px;
     text-align: center;
-    font-size: 19px;
+    font-size: 17px;
     font-weight: 800;
     font-variant-numeric: tabular-nums;
     color:#7dd3fc;
   }
 
+  /* ============ 右上角全屏 ============ */
+  #fullBtn{
+    position: fixed;
+    right: 16px;
+    top: 14px;
+    z-index: 35;
+    height: 42px;
+    min-width: 42px;
+    padding: 0 14px;
+    font-size: 14px;
+    border-radius: 12px;
+    background: rgba(20,24,31,.88);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    box-shadow: 0 8px 24px rgba(0,0,0,.35);
+  }
+
   /* ============ 右上角提示 ============ */
   #hint{
     position: fixed;
-    right: 18px; top: 16px;
+    right: 16px; top: 64px;
     font-size: 12.5px;
     color: rgba(255,255,255,.30);
     z-index: 25;
@@ -214,99 +231,25 @@
     text-align: right;
   }
 
-  /* ============ 编辑弹窗 ============ */
-  #modal{
-    position: fixed;
-    inset: 0;
-    background: rgba(4,6,10,.78);
-    backdrop-filter: blur(6px);
-    -webkit-backdrop-filter: blur(6px);
-    display: none;
-    align-items: center;
-    justify-content: center;
-    padding: 24px;
-    z-index: 50;
-  }
-  #modal.open{ display: flex; }
-  .modal-box{
-    width: min(820px, 100%);
-    max-height: 86vh;
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-    padding: 24px;
-    border-radius: 22px;
-    background: #12161d;
-    border: 1px solid rgba(255,255,255,.10);
-    box-shadow: 0 24px 80px rgba(0,0,0,.7);
-  }
-  .modal-box h3{
-    margin: 0;
-    font-size: 19px;
-    font-weight: 700;
-    color:#e8eef6;
-  }
-  .modal-box .tips{
-    font-size: 13px;
-    color:#6f7d8f;
-    line-height: 1.7;
-  }
-  #editor{
-    flex: 1;
-    min-height: 300px;
-    width: 100%;
-    resize: vertical;
-    padding: 16px 18px;
-    border-radius: 14px;
-    border: 1px solid rgba(255,255,255,.12);
-    background: #0b0e13;
-    color: #dbe6f2;
-    font-family: inherit;
-    font-size: 15px;
-    line-height: 1.8;
-    outline: none;
-  }
-  #editor:focus{ border-color: rgba(56,189,248,.6); }
-  .modal-actions{
-    display: flex;
-    justify-content: flex-end;
-    gap: 12px;
-  }
-  .modal-actions button{
-    height: 50px;
-    padding: 0 26px;
-    font-size: 16px;
-    font-weight: 700;
-    font-family: inherit;
-    border-radius: 14px;
-    cursor: pointer;
-    border: 1px solid rgba(255,255,255,.14);
-    background: rgba(255,255,255,.06);
-    color:#e8eef6;
-    transition: .16s;
-  }
-  .modal-actions button:hover{ background: rgba(255,255,255,.14); }
-  .modal-actions button.primary{
-    border-color: transparent;
-    background: linear-gradient(135deg,#38bdf8,#818cf8);
-    color:#08111c;
-  }
-
   /* ============ 响应式 ============ */
   @media (max-width: 900px){
-    #bar{ gap: 10px; padding: 12px 14px; border-radius: 20px; bottom: 12px; }
-    #bar button.primary{ height: 54px; min-width: 124px; font-size: 17px; padding: 0 20px; }
-    #bar button.action{ height: 48px; padding: 0 15px; font-size: 15px; border-radius: 13px; }
-    #bar button.step{ width: 48px; height: 48px; font-size: 23px; border-radius: 13px; }
-    .group{ padding: 4px 6px 4px 11px; gap: 6px; }
-    .group .val{ min-width: 50px; font-size: 17px; }
+    #bar{ gap: 8px; padding: 8px 10px; border-radius: 16px; bottom: 12px; }
+    #bar button.primary{ height: 42px; min-width: 92px; font-size: 15px; padding: 0 14px; }
+    #bar button.action{ height: 42px; padding: 0 12px; font-size: 14px; }
+    #bar button.step{ width: 36px; height: 36px; font-size: 20px; }
+    .group{ padding: 2px 4px 2px 8px; gap: 4px; }
+    .group .val{ min-width: 36px; font-size: 15px; }
     .group .label{ display: none; }
     #hint{ display: none; }
+    #fullBtn{ right: 12px; top: 12px; height: 40px; padding: 0 12px; }
   }
   @media (max-width: 560px){
-    #bar button.action{ padding: 0 12px; font-size: 14px; }
     #bar button.action .txt{ display: none; }
-    #bar button.action .ico{ font-size: 19px; }
+    #bar button.action .ico{ font-size: 18px; }
+    #bar button.action{ padding: 0 12px; }
+    #fullBtn .txt{ display: none; }
+    #fullBtn .ico{ font-size: 18px; }
+    #fullBtn{ padding: 0; width: 40px; }
   }
 </style>
 </head>
@@ -320,8 +263,10 @@
 
 <div id="empty">
   <div class="big">📄</div>
-  <div>还没有文稿<br>点击下方「上传文稿」或「编辑文本」开始</div>
+  <div>还没有文稿<br>点击下方「上传文稿」开始</div>
 </div>
+
+<button id="fullBtn" type="button" title="全屏"><span class="ico">⛶</span><span class="txt">全屏</span></button>
 
 <div id="hint">
   上下拖动 调进度 · 空格 播放/暂停<br>
@@ -346,25 +291,9 @@
   </div>
 
   <button class="action" id="uploadBtn"><span class="ico">📂</span><span class="txt">上传文稿</span></button>
-  <button class="action" id="editBtn"><span class="ico">✎</span><span class="txt">编辑文本</span></button>
-  <button class="action" id="resetBtn"><span class="ico">⟲</span><span class="txt">回到开头</span></button>
-  <button class="action" id="mirrorBtn"><span class="ico">⇄</span><span class="txt">镜像</span></button>
-  <button class="action" id="fullBtn"><span class="ico">⛶</span><span class="txt">全屏</span></button>
 </div>
 
 <input type="file" id="fileInput" accept=".txt,.md,.markdown,.srt,.vtt,.text,.log,text/plain" hidden>
-
-<div id="modal">
-  <div class="modal-box">
-    <h3>编辑文本</h3>
-    <div class="tips">每行一句，空行分段。也可以直接粘贴字幕文件内容。</div>
-    <textarea id="editor" spellcheck="false" placeholder="在此粘贴或输入文稿..."></textarea>
-    <div class="modal-actions">
-      <button id="cancelEdit">取消</button>
-      <button id="applyEdit" class="primary">应用</button>
-    </div>
-  </div>
-</div>
 
 <script>
 /* ==========================================================
@@ -505,16 +434,9 @@ const fsVal       = document.getElementById('fsVal');
 const fsMinus     = document.getElementById('fsMinus');
 const fsPlus      = document.getElementById('fsPlus');
 const progressBar = document.getElementById('progressBar');
-const resetBtn    = document.getElementById('resetBtn');
-const mirrorBtn   = document.getElementById('mirrorBtn');
 const fullBtn     = document.getElementById('fullBtn');
 const uploadBtn   = document.getElementById('uploadBtn');
-const editBtn     = document.getElementById('editBtn');
 const fileInput   = document.getElementById('fileInput');
-const modal       = document.getElementById('modal');
-const editor      = document.getElementById('editor');
-const cancelEdit  = document.getElementById('cancelEdit');
-const applyEdit   = document.getElementById('applyEdit');
 
 /* ==========================================================
    4. 状态
@@ -524,7 +446,6 @@ let maxScroll   = 0;
 let playing     = false;
 let speed       = SPEED_DEF;
 let fs          = FS_DEF;
-let mirrored    = false;
 let currentText = '';
 let lastT       = null;
 
@@ -631,8 +552,7 @@ function measure(){
 }
 
 function apply(){
-  contentEl.style.transform =
-    'translateY(' + (-pos) + 'px) scaleX(' + (mirrored ? -1 : 1) + ')';
+  contentEl.style.transform = 'translateY(' + (-pos) + 'px)';
   progressBar.style.width =
     (maxScroll > 0 ? (pos / maxScroll) * 100 : 0) + '%';
 }
@@ -735,17 +655,11 @@ speedPlus .addEventListener('click', function(){ setSpeed(speed + SPEED_STEP); }
 fsMinus   .addEventListener('click', function(){ setFontSize(fs - FS_STEP); });
 fsPlus    .addEventListener('click', function(){ setFontSize(fs + FS_STEP); });
 
-resetBtn.addEventListener('click', function(){
+function resetToStart(){
   pos = 0;
   apply();
   setPlaying(false);
-});
-
-mirrorBtn.addEventListener('click', function(){
-  mirrored = !mirrored;
-  mirrorBtn.classList.toggle('on', mirrored);
-  apply();
-});
+}
 
 fullBtn.addEventListener('click', function(){
   if (!document.fullscreenElement){
@@ -773,28 +687,6 @@ fileInput.addEventListener('change', function(){
   reader.onerror = function(){ alert('文件读取失败，请重试。'); };
   reader.readAsText(file, 'UTF-8');
   fileInput.value = '';
-});
-
-/* 编辑文本 */
-editBtn.addEventListener('click', function(){
-  setPlaying(false);
-  editor.value = currentText;
-  modal.classList.add('open');
-  setTimeout(function(){ editor.focus(); }, 60);
-});
-
-cancelEdit.addEventListener('click', function(){ modal.classList.remove('open'); });
-
-applyEdit.addEventListener('click', function(){
-  const parsed = parseDocument(editor.value);
-  renderText(parsed);
-  saveText();
-  modal.classList.remove('open');
-  setPlaying(false);
-});
-
-modal.addEventListener('click', function(e){
-  if (e.target === modal) modal.classList.remove('open');
 });
 
 /* ==========================================================
@@ -854,10 +746,6 @@ viewportEl.addEventListener('wheel', function(e){
    13. 键盘快捷键
    ========================================================== */
 document.addEventListener('keydown', function(e){
-  if (modal.classList.contains('open')){
-    if (e.key === 'Escape') modal.classList.remove('open');
-    return;
-  }
   const tag = (e.target.tagName || '').toLowerCase();
   if (tag === 'input' || tag === 'textarea') return;
 
@@ -873,8 +761,7 @@ document.addEventListener('keydown', function(e){
     case 'ArrowLeft':  case '-': case '_':
       e.preventDefault(); setFontSize(fs - FS_STEP); break;
     case 'f': case 'F': fullBtn.click(); break;
-    case 'r': case 'R': resetBtn.click(); break;
-    case 'm': case 'M': mirrorBtn.click(); break;
+    case 'r': case 'R': resetToStart(); break;
     case 'u': case 'U': uploadBtn.click(); break;
   }
 });
@@ -887,7 +774,7 @@ function showBar(){
   bar.classList.add('show');
   clearTimeout(hideTimer);
   hideTimer = setTimeout(function(){
-    if (playing && !modal.classList.contains('open')) bar.classList.remove('show');
+    if (playing) bar.classList.remove('show');
   }, 3500);
 }
 document.addEventListener('mousemove', showBar);
