@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>AI 提词器 · 自动滚动字幕</title>
+<style>
+  :root{
+    --fs: 44px;
+    --lh: 1.75;
+  }
+  *{ box-sizing: border-box; }
+  html,body{
+    margin:0; padding:0; height:100%;
+    background:#0a0c10;
+    color:#eef3f8;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+                 "Microsoft YaHei", "Segoe UI", sans-serif;
+    overflow:hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ============ 阅读区 ============ */
+  #viewport{
+    position: fixed;
+    inset: 0;
+    overflow: hidden;
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    z-index: 1;
+  }
+  #viewport.dragging{ cursor: grabbing; }
+
+  #content{
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    padding: 42vh clamp(20px, 8vw, 150px) 50vh;
+    font-size: var(--fs);
+    line-height: var(--lh);
+    font-weight: 600;
+    letter-spacing: .015em;
+    text-align: left;
+    will-change: transform;
+    transform-origin: 50% 0;
+    backface-visibility: hidden;
+    pointer-events: none;
+  }
+  #content .line{ margin: 0; }
+  #content .spacer{ height: .62em; }
+
+  /* ============ 空状态 ============ */
+  #empty{
+    position: fixed;
+    inset: 0;
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    color: #5b6779;
+    font-size: 17px;
+    text-align: center;
+    padding: 24px;
+    z-index: 2;
+    pointer-events: none;
+  }
+  #empty.show{ display: flex; }
+  #empty .big{ font-size: 48px; opacity:.5; }
+
+  /* ============ 顶部进度条 ============ */
+  #progressWrap{
+    position: fixed; top:0; left:0; right:0;
+    height: 4px; background: rgba(255,255,255,.07);
+    z-index: 20;
+  }
+  #progressBar{
+    height:100%; width:0%;
+    background: linear-gradient(90deg,#38bdf8,#a78bfa);
+  }
+
+  /* ============ 控制栏 ============ */
+  #bar{
+    position: fixed;
+    left: 50%; bottom: 20px;
+    transform: translateX(-50%) translateY(12px);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 12px 14px;
+    max-width: min(96vw, 1180px);
+    padding: 14px 18px;
+    border-radius: 22px;
+    background: rgba(20,24,31,.9);
+    border: 1px solid rgba(255,255,255,.10);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    box-shadow: 0 14px 50px rgba(0,0,0,.55);
+    z-index: 30;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity .28s ease, transform .28s ease;
+  }
+  #bar.show{
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(-50%) translateY(0);
+  }
+
+  /* 通用按钮 */
+  #bar button{
+    appearance:none;
+    border: 1px solid rgba(255,255,255,.14);
+    background: rgba(255,255,255,.07);
+    color: #e8eef6;
+    font-family: inherit;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background .16s, transform .1s, border-color .16s;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #bar button:hover{ background: rgba(255,255,255,.15); }
+  #bar button:active{ transform: scale(.94); }
+
+  /* 主播放键 */
+  #bar button.primary{
+    height: 58px;
+    min-width: 148px;
+    padding: 0 26px;
+    font-size: 19px;
+    border-radius: 16px;
+    border-color: transparent;
+    background: linear-gradient(135deg,#38bdf8,#818cf8);
+    color:#08111c;
+    font-weight: 800;
+    letter-spacing: .04em;
+    box-shadow: 0 6px 22px rgba(56,189,248,.30);
+  }
+  #bar button.primary.playing{
+    background: linear-gradient(135deg,#fb7185,#f59e0b);
+    box-shadow: 0 6px 22px rgba(251,113,133,.30);
+  }
+
+  /* 功能键 */
+  #bar button.action{
+    height: 52px;
+    padding: 0 20px;
+    font-size: 16px;
+    border-radius: 14px;
+  }
+  #bar button.action.on{
+    background: rgba(56,189,248,.24);
+    border-color: rgba(56,189,248,.65);
+    color:#bae6fd;
+  }
+
+  /* 加减步进键 */
+  #bar button.step{
+    width: 52px;
+    height: 52px;
+    padding: 0;
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 1;
+    border-radius: 14px;
+    color:#bae6fd;
+    background: rgba(56,189,248,.14);
+    border-color: rgba(56,189,248,.30);
+  }
+  #bar button.step:hover{ background: rgba(56,189,248,.26); }
+
+  /* 分组容器 */
+  .group{
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px 5px 14px;
+    border-radius: 18px;
+    background: rgba(255,255,255,.035);
+    border: 1px solid rgba(255,255,255,.07);
+  }
+  .group .label{
+    font-size: 13px;
+    color: #8b98a8;
+    letter-spacing: .06em;
+    margin-right: 2px;
+  }
+  .group .val{
+    min-width: 62px;
+    text-align: center;
+    font-size: 19px;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    color:#7dd3fc;
+  }
+
+  /* ============ 右上角提示 ============ */
+  #hint{
+    position: fixed;
+    right: 18px; top: 16px;
+    font-size: 12.5px;
+    color: rgba(255,255,255,.30);
+    z-index: 25;
+    pointer-events: none;
+    user-select: none;
+    line-height: 1.85;
+    text-align: right;
+  }
+
+  /* ============ 编辑弹窗 ============ */
+  #modal{
+    position: fixed;
+    inset: 0;
+    background: rgba(4,6,10,.78);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    z-index: 50;
+  }
+  #modal.open{ display: flex; }
+  .modal-box{
+    width: min(820px, 100%);
+    max-height: 86vh;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    padding: 24px;
+    border-radius: 22px;
+    background: #12161d;
+    border: 1px solid rgba(255,255,255,.10);
+    box-shadow: 0 24px 80px rgba(0,0,0,.7);
+  }
+  .modal-box h3{
+    margin: 0;
+    font-size: 19px;
+    font-weight: 700;
+    color:#e8eef6;
+  }
+  .modal-box .tips{
+    font-size: 13px;
+    color:#6f7d8f;
+    line-height: 1.7;
+  }
+  #editor{
+    flex: 1;
+    min-height: 300px;
+    width: 100%;
+    resize: vertical;
+    padding: 16px 18px;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,.12);
+    background: #0b0e13;
+    color: #dbe6f2;
+    font-family: inherit;
+    font-size: 15px;
+    line-height: 1.8;
+    outline: none;
+  }
+  #editor:focus{ border-color: rgba(56,189,248,.6); }
+  .modal-actions{
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+  }
+  .modal-actions button{
+    height: 50px;
+    padding: 0 26px;
+    font-size: 16px;
+    font-weight: 700;
+    font-family: inherit;
+    border-radius: 14px;
+    cursor: pointer;
+    border: 1px solid rgba(255,255,255,.14);
+    background: rgba(255,255,255,.06);
+    color:#e8eef6;
+    transition: .16s;
+  }
+  .modal-actions button:hover{ background: rgba(255,255,255,.14); }
+  .modal-actions button.primary{
+    border-color: transparent;
+    background: linear-gradient(135deg,#38bdf8,#818cf8);
+    color:#08111c;
+  }
+
+  /* ============ 响应式 ============ */
+  @media (max-width: 900px){
+    #bar{ gap: 10px; padding: 12px 14px; border-radius: 20px; bottom: 12px; }
+    #bar button.primary{ height: 54px; min-width: 124px; font-size: 17px; padding: 0 20px; }
+    #bar button.action{ height: 48px; padding: 0 15px; font-size: 15px; border-radius: 13px; }
+    #bar button.step{ width: 48px; height: 48px; font-size: 23px; border-radius: 13px; }
+    .group{ padding: 4px 6px 4px 11px; gap: 6px; }
+    .group .val{ min-width: 50px; font-size: 17px; }
+    .group .label{ display: none; }
+    #hint{ display: none; }
+  }
+  @media (max-width: 560px){
+    #bar button.action{ padding: 0 12px; font-size: 14px; }
+    #bar button.action .txt{ display: none; }
+    #bar button.action .ico{ font-size: 19px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="progressWrap"><div id="progressBar"></div></div>
+
+<div id="viewport">
+  <div id="content"></div>
+</div>
+
+<div id="empty">
+  <div class="big">📄</div>
+  <div>还没有文稿<br>点击下方「上传文稿」或「编辑文本」开始</div>
+</div>
+
+<div id="hint">
+  上下拖动 调进度 · 空格 播放/暂停<br>
+  ↑↓ 调速 · ←→ 调字号 · F 全屏 · R 回开头
+</div>
+
+<div id="bar" class="show">
+  <button id="playBtn" class="primary">▶ 播放</button>
+
+  <div class="group">
+    <span class="label">速度</span>
+    <button class="step" id="speedMinus" title="减速">−</button>
+    <span class="val" id="speedVal">60</span>
+    <button class="step" id="speedPlus" title="加速">＋</button>
+  </div>
+
+  <div class="group">
+    <span class="label">字号</span>
+    <button class="step" id="fsMinus" title="缩小">−</button>
+    <span class="val" id="fsVal">44</span>
+    <button class="step" id="fsPlus" title="放大">＋</button>
+  </div>
+
+  <button class="action" id="uploadBtn"><span class="ico">📂</span><span class="txt">上传文稿</span></button>
+  <button class="action" id="editBtn"><span class="ico">✎</span><span class="txt">编辑文本</span></button>
+  <button class="action" id="resetBtn"><span class="ico">⟲</span><span class="txt">回到开头</span></button>
+  <button class="action" id="mirrorBtn"><span class="ico">⇄</span><span class="txt">镜像</span></button>
+  <button class="action" id="fullBtn"><span class="ico">⛶</span><span class="txt">全屏</span></button>
+</div>
+
+<input type="file" id="fileInput" accept=".txt,.md,.markdown,.srt,.vtt,.text,.log,text/plain" hidden>
+
+<div id="modal">
+  <div class="modal-box">
+    <h3>编辑文本</h3>
+    <div class="tips">每行一句，空行分段。也可以直接粘贴字幕文件内容。</div>
+    <textarea id="editor" spellcheck="false" placeholder="在此粘贴或输入文稿..."></textarea>
+    <div class="modal-actions">
+      <button id="cancelEdit">取消</button>
+      <button id="applyEdit" class="primary">应用</button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ==========================================================
+   1. 默认文稿
+   ========================================================== */
+const DEFAULT_TEXT = `如果今天让我谈 AI 时代下的小孩子教育，
+我会先讲一个可能很多人不爱听的观点。
+
+我们可以读九年书、十年书，
+然后去学一些非常基本的皮毛。
+但是我们不可能每天不睡觉地
+去学 ChatGPT 的预训练知识。
+
+而且它现在有一个非常强的能力，
+是它可以边做边学。
+所以它能够更快地比人类获取到知识，
+并且能够获取前人的知识，
+也就是人类的智慧。
+
+所以我觉得现在，你如果还是想着说，
+或者你的小孩、你的下一代还是想着说：
+我要好好读书，考一个好的大学，
+然后再能找一份好的工作——
+这个事情已经变成一个非常妄想的东西了。
+
+我是这么认为的。
+当然还是有很多人会沿袭他们之前的成功经验，
+去尝试教小孩这一切，
+教小孩要往这个方向走，
+但我觉得这个是非常非常不 reasonable 的。
+
+从 23 年、24 年开始，尤其是去年，
+写代码这件事情被攻克之后，
+我个人认为，
+你想要依靠智力去获取超额收益，
+比如说做医生、律师，
+或者其他的知识工作，
+想做高级打工人，
+这件事情已经成为了一个泡影，
+它已经不是一个可以追寻的目标了。
+
+所以要想着说，那下一个目标是什么呢？
+我个人认为，我自己定了一个自己的目标：
+虽然赚钱对我来说已经不是最主要的事情，
+但我觉得，用智能赚取复利这件事情，
+大家有没有想过这个概念？
+以前在什么样的人群当中、职业当中才有可能？
+
+如果把这个思路放到小孩子教育上，
+那就不是继续逼他成为一个
+更会考试、更听话、更便宜的高级打工人，
+而是从小让他学会使用智能、和智能协作，
+甚至用智能去赚取复利。
+
+第一，
+书还要读，
+但读书的目的不能再只是考大学、找好工作。
+读书是为了获取前人的知识，
+也就是人类的智慧，
+然后训练判断力，
+再用 AI 去放大。
+不是不读书，
+而是不能只学一点基本皮毛，
+只为了应付考试。
+
+第二，
+不要让孩子跟 AI 比记忆、比刷题、比标准答案。
+AI 已经可以边做边学，
+比人更快获取知识。
+孩子真正要学的，
+是提问、判断、审美、跨学科连接，
+还有把知识变成作品和资产的能力。
+
+第三，
+要让孩子像 AI 一样边做边学。
+不是等学完了再做，
+而是在项目里学，
+在发布作品中学，
+在反馈里迭代。
+做一个小产品、写一个工具、
+拍一个内容、解决一个真实问题，
+这些都比单纯背知识点更接近未来。
+
+第四，
+要从小理解复利。
+以前靠什么人群、什么职业才能用智能赚复利？
+有资本的人、有知识产权的人、
+有产品的人、有网络效应的人。
+未来小孩要学的，
+不只是出卖时间换钱，
+而是积累可以重复产生价值的
+代码、内容、产品、品牌和系统。
+
+第五，
+也要教他管理睡眠、身体和注意力。
+因为我们不可能每天不睡觉地
+去学 ChatGPT 的预训练知识。
+AI 可以不睡，人不行。
+人的优势不是变成机器，
+而是会指挥机器。
+
+所以，AI 时代下的小孩子教育，
+核心不是“好好读书、考好大学、找好工作”这条旧路，
+而是让孩子学会用智能获取前人智慧，
+边做边学，
+把学到的变成作品，
+把作品变成资产，
+最后用智能赚取复利。
+
+如果家长还沿袭过去的成功经验，
+硬把孩子往旧方向推，
+那我觉得，这非常非常不 reasonable。
+下一个目标，
+不是培养高级打工人，
+而是培养会用智能赚复利的人。`;
+
+/* ==========================================================
+   2. 常量
+   ========================================================== */
+const KEY_TEXT = 'ai-teleprompter-text-v2';
+const KEY_SET  = 'ai-teleprompter-settings-v2';
+
+const SPEED_MIN = 10,  SPEED_MAX = 300, SPEED_STEP = 10, SPEED_DEF = 60;
+const FS_MIN    = 16,  FS_MAX    = 130, FS_STEP    = 4,  FS_DEF    = 44;
+
+/* ==========================================================
+   3. 元素
+   ========================================================== */
+const viewportEl  = document.getElementById('viewport');
+const contentEl   = document.getElementById('content');
+const emptyEl     = document.getElementById('empty');
+const bar         = document.getElementById('bar');
+const playBtn     = document.getElementById('playBtn');
+const speedVal    = document.getElementById('speedVal');
+const speedMinus  = document.getElementById('speedMinus');
+const speedPlus   = document.getElementById('speedPlus');
+const fsVal       = document.getElementById('fsVal');
+const fsMinus     = document.getElementById('fsMinus');
+const fsPlus      = document.getElementById('fsPlus');
+const progressBar = document.getElementById('progressBar');
+const resetBtn    = document.getElementById('resetBtn');
+const mirrorBtn   = document.getElementById('mirrorBtn');
+const fullBtn     = document.getElementById('fullBtn');
+const uploadBtn   = document.getElementById('uploadBtn');
+const editBtn     = document.getElementById('editBtn');
+const fileInput   = document.getElementById('fileInput');
+const modal       = document.getElementById('modal');
+const editor      = document.getElementById('editor');
+const cancelEdit  = document.getElementById('cancelEdit');
+const applyEdit   = document.getElementById('applyEdit');
+
+/* ==========================================================
+   4. 状态
+   ========================================================== */
+let pos         = 0;
+let maxScroll   = 0;
+let playing     = false;
+let speed       = SPEED_DEF;
+let fs          = FS_DEF;
+let mirrored    = false;
+let currentText = '';
+let lastT       = null;
+
+/* ==========================================================
+   5. 文本解析
+   ========================================================== */
+function parseDocument(raw){
+  let text = String(raw == null ? '' : raw).replace(/\r\n?/g, '\n');
+
+  if (/-->/.test(text)) {
+    const out = [];
+    for (const rawLine of text.split('\n')) {
+      const line = rawLine.trim();
+      if (!line) continue;
+      if (/^\d+$/.test(line)) continue;
+      if (line.includes('-->')) continue;
+      if (/^WEBVTT/i.test(line)) continue;
+      if (/^(NOTE|STYLE|REGION)\b/i.test(line)) continue;
+      out.push(line);
+    }
+    const dedup = [];
+    for (const l of out) {
+      if (dedup.length === 0 || dedup[dedup.length - 1] !== l) dedup.push(l);
+    }
+    text = dedup.join('\n');
+  }
+
+  text = text
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^\s*[-*+]\s+/gm, '')
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/^\s*>\s?/gm, '');
+
+  return text.trim();
+}
+
+function softWrap(line, maxLen = 42){
+  if (line.length <= maxLen) return [line];
+  const punct = '，。！？；：、,.!?;:';
+  const parts = [];
+  let cur = '';
+  for (let i = 0; i < line.length; i++){
+    cur += line[i];
+    if (punct.includes(line[i]) && cur.length >= maxLen * 0.6){
+      parts.push(cur);
+      cur = '';
+    }
+  }
+  if (cur.trim()) parts.push(cur);
+  return parts.length ? parts : [line];
+}
+
+/* ==========================================================
+   6. 渲染
+   ========================================================== */
+function renderText(text){
+  currentText = text || '';
+  contentEl.innerHTML = '';
+
+  if (!currentText.trim()){
+    emptyEl.classList.add('show');
+    maxScroll = 0;
+    pos = 0;
+    apply();
+    return;
+  }
+  emptyEl.classList.remove('show');
+
+  const frag = document.createDocumentFragment();
+  currentText.replace(/\r\n?/g, '\n').split('\n').forEach(raw => {
+    const line = raw.trim();
+    if (!line){
+      const s = document.createElement('div');
+      s.className = 'spacer';
+      frag.appendChild(s);
+      return;
+    }
+    softWrap(line).forEach(piece => {
+      const d = document.createElement('div');
+      d.className = 'line';
+      d.textContent = piece;
+      frag.appendChild(d);
+    });
+  });
+  contentEl.appendChild(frag);
+
+  // 同步测一次 + 下一帧再测一次（防止字体/布局延迟）
+  measure();
+  pos = 0;
+  apply();
+  requestAnimationFrame(() => {
+    measure();
+    apply();
+  });
+}
+
+/* ==========================================================
+   7. 测量 / 应用
+   ========================================================== */
+function clamp(v){ return Math.max(0, Math.min(maxScroll, v)); }
+
+function measure(){
+  maxScroll = Math.max(0, contentEl.offsetHeight - viewportEl.clientHeight);
+}
+
+function apply(){
+  contentEl.style.transform =
+    'translateY(' + (-pos) + 'px) scaleX(' + (mirrored ? -1 : 1) + ')';
+  progressBar.style.width =
+    (maxScroll > 0 ? (pos / maxScroll) * 100 : 0) + '%';
+}
+
+function setPlaying(v){
+  playing = !!v;
+  playBtn.textContent = playing ? '⏸ 暂停' : '▶ 播放';
+  playBtn.classList.toggle('playing', playing);
+  if (playing) showBar();
+}
+
+/* ==========================================================
+   8. 参数
+   ========================================================== */
+function setSpeed(v, save){
+  speed = Math.max(SPEED_MIN, Math.min(SPEED_MAX, Math.round(v)));
+  speedVal.textContent = speed;
+  if (save !== false) saveSettings();
+}
+
+function setFontSize(v, save){
+  const next = Math.max(FS_MIN, Math.min(FS_MAX, Math.round(v)));
+  if (next === fs){ fsVal.textContent = fs; return; }
+  const ratio = maxScroll > 0 ? pos / maxScroll : 0;
+  fs = next;
+  fsVal.textContent = fs;
+  document.documentElement.style.setProperty('--fs', fs + 'px');
+  requestAnimationFrame(() => {
+    measure();
+    pos = ratio * maxScroll;
+    apply();
+  });
+  if (save !== false) saveSettings();
+}
+
+/* ==========================================================
+   9. 本地存储（全部 try 包裹，避免隐私模式崩溃）
+   ========================================================== */
+function saveSettings(){
+  try { localStorage.setItem(KEY_SET, JSON.stringify({ speed: speed, fs: fs })); } catch (_) {}
+}
+function saveText(){
+  try { localStorage.setItem(KEY_TEXT, currentText); } catch (_) {}
+}
+function loadStoredText(){
+  try {
+    const t = localStorage.getItem(KEY_TEXT);
+    if (t === null) return DEFAULT_TEXT;   // 从未保存过 → 用默认
+    return t;                              // 可能为空字符串 → 空状态
+  } catch (_) {
+    return DEFAULT_TEXT;
+  }
+}
+function loadStoredSettings(){
+  try {
+    const s = JSON.parse(localStorage.getItem(KEY_SET) || '{}');
+    if (typeof s.speed === 'number') speed = Math.max(SPEED_MIN, Math.min(SPEED_MAX, s.speed));
+    if (typeof s.fs === 'number')    fs    = Math.max(FS_MIN,    Math.min(FS_MAX,    s.fs));
+  } catch (_) {}
+}
+
+/* ==========================================================
+   10. 动画循环（稳定版）
+   ========================================================== */
+function tick(timestamp){
+  if (lastT === null) lastT = timestamp;
+  const dt = Math.min((timestamp - lastT) / 1000, 0.1);
+  lastT = timestamp;
+
+  if (playing && maxScroll > 0){
+    pos += speed * dt;
+    if (pos >= maxScroll){
+      pos = maxScroll;
+      setPlaying(false);
+    }
+    apply();
+  }
+  requestAnimationFrame(tick);
+}
+
+/* ==========================================================
+   11. 播放控制
+   ========================================================== */
+playBtn.addEventListener('click', function(e){
+  e.stopPropagation();
+
+  // 如果还没测到高度，先补测一次
+  if (maxScroll <= 0) measure();
+
+  if (!playing && pos >= maxScroll && maxScroll > 0){
+    pos = 0;
+    apply();
+  }
+  setPlaying(!playing);
+  showBar();
+});
+
+speedMinus.addEventListener('click', function(){ setSpeed(speed - SPEED_STEP); });
+speedPlus .addEventListener('click', function(){ setSpeed(speed + SPEED_STEP); });
+fsMinus   .addEventListener('click', function(){ setFontSize(fs - FS_STEP); });
+fsPlus    .addEventListener('click', function(){ setFontSize(fs + FS_STEP); });
+
+resetBtn.addEventListener('click', function(){
+  pos = 0;
+  apply();
+  setPlaying(false);
+});
+
+mirrorBtn.addEventListener('click', function(){
+  mirrored = !mirrored;
+  mirrorBtn.classList.toggle('on', mirrored);
+  apply();
+});
+
+fullBtn.addEventListener('click', function(){
+  if (!document.fullscreenElement){
+    const p = document.documentElement.requestFullscreen;
+    if (p) p.call(document.documentElement).catch(function(){});
+  } else {
+    if (document.exitFullscreen) document.exitFullscreen();
+  }
+});
+
+/* 上传文稿 */
+uploadBtn.addEventListener('click', function(){ fileInput.click(); });
+
+fileInput.addEventListener('change', function(){
+  const file = fileInput.files && fileInput.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(){
+    const parsed = parseDocument(reader.result);
+    renderText(parsed);
+    saveText();
+    setPlaying(false);
+    showBar();
+  };
+  reader.onerror = function(){ alert('文件读取失败，请重试。'); };
+  reader.readAsText(file, 'UTF-8');
+  fileInput.value = '';
+});
+
+/* 编辑文本 */
+editBtn.addEventListener('click', function(){
+  setPlaying(false);
+  editor.value = currentText;
+  modal.classList.add('open');
+  setTimeout(function(){ editor.focus(); }, 60);
+});
+
+cancelEdit.addEventListener('click', function(){ modal.classList.remove('open'); });
+
+applyEdit.addEventListener('click', function(){
+  const parsed = parseDocument(editor.value);
+  renderText(parsed);
+  saveText();
+  modal.classList.remove('open');
+  setPlaying(false);
+});
+
+modal.addEventListener('click', function(e){
+  if (e.target === modal) modal.classList.remove('open');
+});
+
+/* ==========================================================
+   12. 上下拖动 / 滚轮 调进度
+   ========================================================== */
+let dragging   = false;
+let dragLastY  = null;
+let wasPlaying = false;
+
+viewportEl.addEventListener('pointerdown', function(e){
+  if (e.button !== undefined && e.button !== 0) return;
+  if (maxScroll <= 0) return;
+
+  dragging   = true;
+  dragLastY  = e.clientY;
+  wasPlaying = playing;
+  if (playing) setPlaying(false);
+
+  viewportEl.classList.add('dragging');
+  try { viewportEl.setPointerCapture(e.pointerId); } catch (_) {}
+  e.preventDefault();
+});
+
+viewportEl.addEventListener('pointermove', function(e){
+  if (!dragging) return;
+  const y = e.clientY;
+  pos = clamp(pos - (y - dragLastY));
+  dragLastY = y;
+  apply();
+  e.preventDefault();
+});
+
+function endDrag(e){
+  if (!dragging) return;
+  dragging  = false;
+  dragLastY = null;
+  viewportEl.classList.remove('dragging');
+  try {
+    if (e && e.pointerId !== undefined) viewportEl.releasePointerCapture(e.pointerId);
+  } catch (_) {}
+
+  if (wasPlaying && pos < maxScroll) setPlaying(true);
+  wasPlaying = false;
+}
+
+viewportEl.addEventListener('pointerup', endDrag);
+viewportEl.addEventListener('pointercancel', endDrag);
+
+viewportEl.addEventListener('wheel', function(e){
+  if (maxScroll <= 0) return;
+  e.preventDefault();
+  pos = clamp(pos + e.deltaY);
+  apply();
+}, { passive: false });
+
+/* ==========================================================
+   13. 键盘快捷键
+   ========================================================== */
+document.addEventListener('keydown', function(e){
+  if (modal.classList.contains('open')){
+    if (e.key === 'Escape') modal.classList.remove('open');
+    return;
+  }
+  const tag = (e.target.tagName || '').toLowerCase();
+  if (tag === 'input' || tag === 'textarea') return;
+
+  switch (e.key){
+    case ' ':
+      e.preventDefault();
+      playBtn.click();
+      break;
+    case 'ArrowUp':    e.preventDefault(); setSpeed(speed + SPEED_STEP); break;
+    case 'ArrowDown':  e.preventDefault(); setSpeed(speed - SPEED_STEP); break;
+    case 'ArrowRight': case '=': case '+':
+      e.preventDefault(); setFontSize(fs + FS_STEP); break;
+    case 'ArrowLeft':  case '-': case '_':
+      e.preventDefault(); setFontSize(fs - FS_STEP); break;
+    case 'f': case 'F': fullBtn.click(); break;
+    case 'r': case 'R': resetBtn.click(); break;
+    case 'm': case 'M': mirrorBtn.click(); break;
+    case 'u': case 'U': uploadBtn.click(); break;
+  }
+});
+
+/* ==========================================================
+   14. 控制栏自动隐藏
+   ========================================================== */
+let hideTimer = null;
+function showBar(){
+  bar.classList.add('show');
+  clearTimeout(hideTimer);
+  hideTimer = setTimeout(function(){
+    if (playing && !modal.classList.contains('open')) bar.classList.remove('show');
+  }, 3500);
+}
+document.addEventListener('mousemove', showBar);
+document.addEventListener('touchstart', showBar, { passive: true });
+document.addEventListener('click', showBar);
+
+/* ==========================================================
+   15. 窗口尺寸变化
+   ========================================================== */
+let resizeTimer = null;
+function onResize(){
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(function(){
+    const ratio = maxScroll > 0 ? pos / maxScroll : 0;
+    measure();
+    pos = ratio * maxScroll;
+    apply();
+  }, 120);
+}
+window.addEventListener('resize', onResize);
+window.addEventListener('orientationchange', onResize);
+
+/* ==========================================================
+   16. 启动
+   ========================================================== */
+function init(){
+  loadStoredSettings();
+
+  document.documentElement.style.setProperty('--fs', fs + 'px');
+  speedVal.textContent = speed;
+  fsVal.textContent = fs;
+
+  const storedText = loadStoredText();
+  renderText(storedText);
+
+  // 首次访问：把默认文稿写入存储
+  try {
+    if (localStorage.getItem(KEY_TEXT) === null) saveText();
+  } catch (_) {}
+  saveSettings();
+
+  // 启动动画循环
+  lastT = null;
+  requestAnimationFrame(tick);
+
+  // 稍微再补测一次，确保字体渲染后高度正确
+  setTimeout(function(){
+    const ratio = maxScroll > 0 ? pos / maxScroll : 0;
+    measure();
+    pos = ratio * maxScroll;
+    apply();
+  }, 300);
+}
+
+if (document.readyState === 'loading'){
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
+}
+</script>
+</body>
+</html>
