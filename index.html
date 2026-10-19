@@ -90,7 +90,7 @@
     align-items: center;
     justify-content: center;
     gap: 10px;
-    max-width: min(96vw, 920px);
+    max-width: min(96vw, 1080px);
     padding: 10px 14px;
     border-radius: 18px;
     background: rgba(20,24,31,.9);
@@ -231,9 +231,87 @@
     text-align: right;
   }
 
+  /* ============ 粘贴弹窗 ============ */
+  #modal{
+    position: fixed;
+    inset: 0;
+    background: rgba(4,6,10,.78);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    z-index: 50;
+  }
+  #modal.open{ display: flex; }
+  .modal-box{
+    width: min(820px, 100%);
+    max-height: 86vh;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    padding: 22px;
+    border-radius: 20px;
+    background: #12161d;
+    border: 1px solid rgba(255,255,255,.10);
+    box-shadow: 0 24px 80px rgba(0,0,0,.7);
+  }
+  .modal-box h3{
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color:#e8eef6;
+  }
+  .modal-box .tips{
+    font-size: 13px;
+    color:#6f7d8f;
+    line-height: 1.7;
+  }
+  #editor{
+    flex: 1;
+    min-height: 280px;
+    width: 100%;
+    resize: vertical;
+    padding: 16px 18px;
+    border-radius: 14px;
+    border: 1px solid rgba(255,255,255,.12);
+    background: #0b0e13;
+    color: #dbe6f2;
+    font-family: inherit;
+    font-size: 15px;
+    line-height: 1.8;
+    outline: none;
+  }
+  #editor:focus{ border-color: rgba(56,189,248,.6); }
+  .modal-actions{
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+  .modal-actions button{
+    height: 46px;
+    padding: 0 22px;
+    font-size: 15px;
+    font-weight: 700;
+    font-family: inherit;
+    border-radius: 13px;
+    cursor: pointer;
+    border: 1px solid rgba(255,255,255,.14);
+    background: rgba(255,255,255,.06);
+    color:#e8eef6;
+    transition: .16s;
+  }
+  .modal-actions button:hover{ background: rgba(255,255,255,.14); }
+  .modal-actions button.primary{
+    border-color: transparent;
+    background: linear-gradient(135deg,#38bdf8,#818cf8);
+    color:#08111c;
+  }
+
   /* ============ 响应式 ============ */
   @media (max-width: 900px){
-    #bar{ gap: 8px; padding: 8px 10px; border-radius: 16px; bottom: 12px; }
+    #bar{ gap: 8px; padding: 8px 10px; border-radius: 16px; bottom: 12px; max-width: min(96vw, 720px); }
     #bar button.primary{ height: 42px; min-width: 92px; font-size: 15px; padding: 0 14px; }
     #bar button.action{ height: 42px; padding: 0 12px; font-size: 14px; }
     #bar button.step{ width: 36px; height: 36px; font-size: 20px; }
@@ -250,6 +328,7 @@
     #fullBtn .txt{ display: none; }
     #fullBtn .ico{ font-size: 18px; }
     #fullBtn{ padding: 0; width: 40px; }
+    #editor{ min-height: 220px; }
   }
 </style>
 </head>
@@ -263,7 +342,7 @@
 
 <div id="empty">
   <div class="big">📄</div>
-  <div>还没有文稿<br>点击下方「上传文稿」开始</div>
+  <div>还没有文稿<br>点击下方「粘贴文本」或「上传文稿」开始</div>
 </div>
 
 <button id="fullBtn" type="button" title="全屏"><span class="ico">⛶</span><span class="txt">全屏</span></button>
@@ -290,10 +369,23 @@
     <button class="step" id="fsPlus" title="放大">＋</button>
   </div>
 
+  <button class="action" id="pasteBtn"><span class="ico">📋</span><span class="txt">粘贴文本</span></button>
   <button class="action" id="uploadBtn"><span class="ico">📂</span><span class="txt">上传文稿</span></button>
 </div>
 
 <input type="file" id="fileInput" accept=".txt,.md,.markdown,.srt,.vtt,.text,.log,text/plain" hidden>
+
+<div id="modal">
+  <div class="modal-box">
+    <h3>粘贴文本</h3>
+    <div class="tips">把文稿粘贴到下面，点「开始展示」即可。每行一句，空行分段；也支持字幕文件内容。</div>
+    <textarea id="editor" spellcheck="false" placeholder="在此粘贴文稿…"></textarea>
+    <div class="modal-actions">
+      <button type="button" id="cancelPaste">取消</button>
+      <button type="button" id="applyPaste" class="primary">开始展示</button>
+    </div>
+  </div>
+</div>
 
 <script>
 /* ==========================================================
@@ -435,8 +527,13 @@ const fsMinus     = document.getElementById('fsMinus');
 const fsPlus      = document.getElementById('fsPlus');
 const progressBar = document.getElementById('progressBar');
 const fullBtn     = document.getElementById('fullBtn');
+const pasteBtn    = document.getElementById('pasteBtn');
 const uploadBtn   = document.getElementById('uploadBtn');
 const fileInput   = document.getElementById('fileInput');
+const modal       = document.getElementById('modal');
+const editor      = document.getElementById('editor');
+const cancelPaste = document.getElementById('cancelPaste');
+const applyPaste  = document.getElementById('applyPaste');
 
 /* ==========================================================
    4. 状态
@@ -670,6 +767,46 @@ fullBtn.addEventListener('click', function(){
   }
 });
 
+function closePasteModal(){
+  modal.classList.remove('open');
+}
+
+function openPasteModal(){
+  setPlaying(false);
+  editor.value = currentText || '';
+  modal.classList.add('open');
+  setTimeout(function(){
+    editor.focus();
+    editor.select();
+  }, 40);
+  if (navigator.clipboard && navigator.clipboard.readText){
+    navigator.clipboard.readText().then(function(text){
+      if (!text || !text.trim()) return;
+      if (!editor.value.trim()){
+        editor.value = text;
+        editor.focus();
+      }
+    }).catch(function(){});
+  }
+}
+
+function applyPastedText(){
+  const parsed = parseDocument(editor.value);
+  renderText(parsed);
+  saveText();
+  closePasteModal();
+  setPlaying(false);
+  showBar();
+}
+
+/* 粘贴文本 */
+pasteBtn.addEventListener('click', openPasteModal);
+cancelPaste.addEventListener('click', closePasteModal);
+applyPaste.addEventListener('click', applyPastedText);
+modal.addEventListener('click', function(e){
+  if (e.target === modal) closePasteModal();
+});
+
 /* 上传文稿 */
 uploadBtn.addEventListener('click', function(){ fileInput.click(); });
 
@@ -746,6 +883,14 @@ viewportEl.addEventListener('wheel', function(e){
    13. 键盘快捷键
    ========================================================== */
 document.addEventListener('keydown', function(e){
+  if (modal.classList.contains('open')){
+    if (e.key === 'Escape') closePasteModal();
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter'){
+      e.preventDefault();
+      applyPastedText();
+    }
+    return;
+  }
   const tag = (e.target.tagName || '').toLowerCase();
   if (tag === 'input' || tag === 'textarea') return;
 
@@ -763,6 +908,12 @@ document.addEventListener('keydown', function(e){
     case 'f': case 'F': fullBtn.click(); break;
     case 'r': case 'R': resetToStart(); break;
     case 'u': case 'U': uploadBtn.click(); break;
+    case 'v': case 'V':
+      if (!(e.ctrlKey || e.metaKey)){
+        e.preventDefault();
+        openPasteModal();
+      }
+      break;
   }
 });
 
@@ -774,7 +925,7 @@ function showBar(){
   bar.classList.add('show');
   clearTimeout(hideTimer);
   hideTimer = setTimeout(function(){
-    if (playing) bar.classList.remove('show');
+    if (playing && !modal.classList.contains('open')) bar.classList.remove('show');
   }, 3500);
 }
 document.addEventListener('mousemove', showBar);
